@@ -1,103 +1,162 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase, Entry } from '../lib/supabase';
+import { EntryInput } from './components/entry-input';
+import { ContributionGraph } from './components/contribution-graph';
+import { EntryCard } from './components/entry-card';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  async function loadEntries() {
+    setLoading(true);
+    console.log('Loading entries...');
+    
+    try {
+      // Test basic connection first
+      const { data: testData, error: testError } = await supabase
+        .from('entries')
+        .select('count(*)', { count: 'exact', head: true });
+      
+      console.log('Connection test - count:', testData);
+      console.log('Connection test - error:', testError);
+      
+      const { data, error } = await supabase
+        .from('entries')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading entries:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      } else {
+        console.log('Loaded entries:', data);
+        console.log('Number of entries:', data?.length || 0);
+        setEntries(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+    }
+    
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    console.log('Component mounted, loading entries...');
+    loadEntries();
+  }, []);
+
+  const handleSave = () => {
+    loadEntries(); // Reload entries after saving
+  };
+
+  // Filter entries based on search
+  const filteredEntries = entries.filter(entry => {
+    const contentMatch = entry.content.toLowerCase().includes(searchTerm.toLowerCase());
+    const tagMatch = entry.tags && Array.isArray(entry.tags) ? 
+      entry.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) : false;
+    return contentMatch || tagMatch;
+  });
+
+  console.log('Total entries:', entries.length);
+  console.log('Filtered entries:', filteredEntries.length);
+  console.log('Loading state:', loading);
+
+  return (
+    <main className="min-h-screen bg-black">
+      {/* Navigation Bar */}
+      <nav className="bg-gray-900 border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#15c460] rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">W</span>
+              </div>
+              <span className="text-xl font-semibold text-white">WorkJournal</span>
+            </div>
+            <button className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg transition-colors border border-gray-700">
+              Export
+            </button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </nav>
+
+      {/* Full-width Activity Overview */}
+      <section className="w-full bg-black py-8">
+        <div className="max-w-7xl mx-auto px-8">
+          <ContributionGraph entries={entries} />
+        </div>
+      </section>
+
+      {/* Main Content - Bento Grid Layout */}
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-fit">
+          {/* Left Column - Input Section */}
+          <div className="space-y-6">
+            {/* Input Card */}
+            <div className="bg-gray-900 p-8 rounded-2xl shadow-lg border border-gray-800">
+              <h2 className="text-xl font-semibold mb-6 text-gray-100">What happened today?</h2>
+              <EntryInput onSave={handleSave} />
+            </div>
+          </div>
+
+          {/* Right Column - Entries List */}
+          <div className="space-y-6">
+            {/* Search Bar */}
+            <div className="bg-gray-900 p-6 rounded-2xl shadow-lg border border-gray-800">
+              <input
+                type="text"
+                placeholder="🔍 Search entries and tags..."
+                className="w-full p-4 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#15c460] focus:border-transparent text-gray-100 placeholder-gray-400"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {/* Entries List */}
+            <div className="bg-gray-900 p-6 rounded-2xl shadow-lg border border-gray-800 max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-100">
+                  Your Entries
+                </h3>
+                {searchTerm && (
+                  <span className="text-sm text-gray-400 bg-gray-800 px-3 py-1 rounded-full">
+                    {filteredEntries.length} results
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-4">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-pulse flex space-x-4 w-full">
+                      <div className="rounded-lg bg-gray-800 h-24 w-full"></div>
+                    </div>
+                  </div>
+                ) : filteredEntries.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-400 text-lg mb-2">
+                      {searchTerm ? 'No entries match your search.' : 'No entries yet.'}
+                    </p>
+                    {!searchTerm && (
+                      <p className="text-gray-500 text-sm">
+                        Start by adding your first entry in the left panel!
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  filteredEntries.map((entry) => (
+                    <EntryCard key={entry.id} entry={entry} />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
