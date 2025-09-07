@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "src/app/api/generate-tags/route.ts": {
-      "maxDuration": 10
-    }
-  }
-}
