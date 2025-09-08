@@ -32,11 +32,18 @@ export function ContributionGraph({ entries }: GraphProps) {
     );
   }
 
-  const days = Array.from({ length: 365 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (364 - i));
-    return date.toISOString().split('T')[0];
-  });
+  // Generate days for the past 6 months (dynamic day count ~180-184 depending on month lengths)
+  const today = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - 6);
+  startDate.setHours(0, 0, 0, 0);
+
+  const days: string[] = [];
+  const cursor = new Date(startDate);
+  while (cursor <= today) {
+    days.push(new Date(cursor).toISOString().split('T')[0]);
+    cursor.setDate(cursor.getDate() + 1);
+  }
 
   const entryMap = entries.reduce((acc, entry) => {
     const date = entry.created_at.split('T')[0];
@@ -69,82 +76,96 @@ export function ContributionGraph({ entries }: GraphProps) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-3xl font-bold text-white">Activity Overview</h2>
-        <span className="text-gray-400 bg-gray-800 px-4 py-2 rounded-full text-sm font-medium">Last 365 days</span>
+        <h2 className="text-3xl font-bold text-white tracking-wide uppercase">Activity Overview</h2>
+  <span className="text-gray-400 bg-gray-800 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider">Last 6 months</span>
       </div>
       
-      <div className="overflow-x-auto pb-4">
-        {/* Month labels */}
-        <div className="relative mb-4">
-          <div className="flex gap-[3px] ml-10">
-            {weeks.map((_, weekIndex) => (
-              <div key={weekIndex} className="w-4 h-6 flex items-start justify-center">
-                {monthLabels.find(label => label.position === weekIndex) && (
-                  <span className="text-sm text-gray-300 font-medium">
-                    {monthLabels.find(label => label.position === weekIndex)?.month}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        <div className="flex gap-[3px]">
-          {/* Weekday labels */}
-          <div className="flex flex-col gap-[3px] mr-2">
-            <div className="w-8 h-4 flex items-center justify-end">
-              <span className="text-sm text-gray-300">Sun</span>
-            </div>
-            <div className="w-8 h-4"></div>
-            <div className="w-8 h-4 flex items-center justify-end">
-              <span className="text-sm text-gray-300">Tue</span>
-            </div>
-            <div className="w-8 h-4"></div>
-            <div className="w-8 h-4 flex items-center justify-end">
-              <span className="text-sm text-gray-300">Thu</span>
-            </div>
-            <div className="w-8 h-4"></div>
-            <div className="w-8 h-4 flex items-center justify-end">
-              <span className="text-sm text-gray-300">Sat</span>
+      <div className="flex items-end gap-8">
+        <div className="overflow-x-auto pb-4 flex-1">
+          {/* Month labels */}
+          <div className="relative mb-4">
+            <div className="flex gap-[3px] ml-10">
+              {weeks.map((_, weekIndex) => (
+                <div key={weekIndex} className="w-4 h-6 flex items-start justify-center">
+                  {monthLabels.find(label => label.position === weekIndex) && (
+                    <span className="text-[10px] text-gray-300 font-semibold uppercase tracking-wide">
+                      {monthLabels.find(label => label.position === weekIndex)?.month.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
           
-          {/* Contribution grid */}
-          <div className="inline-flex gap-[3px]">
-            {weeks.map((week, weekIndex) => (
-              <div key={weekIndex} className="flex flex-col gap-[3px]">
-                {week.map((day) => {
-                  const count = entryMap[day] || 0;
-                  const intensity = 
-                    count === 0 ? 'bg-gray-800' : 
-                    count === 1 ? 'bg-[#15c460]/30' : 
-                    count === 2 ? 'bg-[#15c460]/60' : 
-                    count >= 3 ? 'bg-[#15c460]' : 'bg-gray-800';
-                  
-                  return (
-                    <div
-                      key={day}
-                      className={`
-                        w-4 h-4 rounded-sm ${intensity} 
-                        hover:ring-2 hover:ring-[#15c460] hover:ring-offset-1 hover:ring-offset-black
-                        cursor-pointer transition-all duration-200 relative
-                        ${count > 0 ? 'shadow-lg shadow-[#15c460]/20' : ''}
-                      `}
-                      onMouseEnter={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setTooltip({
-                          day,
-                          x: rect.left + rect.width / 2,
-                          y: rect.top - 10
-                        });
-                      }}
-                      onMouseLeave={() => setTooltip({ day: null, x: 0, y: 0 })}
-                    />
-                  );
-                })}
+          <div className="flex gap-[3px]">
+            {/* Weekday labels */}
+            <div className="flex flex-col gap-[3px] mr-2">
+              <div className="w-8 h-4 flex items-center justify-end">
+                <span className="text-[10px] text-gray-300 font-semibold tracking-wide uppercase">SUN</span>
               </div>
-            ))}
+              <div className="w-8 h-4"></div>
+              <div className="w-8 h-4 flex items-center justify-end">
+                <span className="text-[10px] text-gray-300 font-semibold tracking-wide uppercase">TUE</span>
+              </div>
+              <div className="w-8 h-4"></div>
+              <div className="w-8 h-4 flex items-center justify-end">
+                <span className="text-[10px] text-gray-300 font-semibold tracking-wide uppercase">THU</span>
+              </div>
+              <div className="w-8 h-4"></div>
+              <div className="w-8 h-4 flex items-center justify-end">
+                <span className="text-[10px] text-gray-300 font-semibold tracking-wide uppercase">SAT</span>
+              </div>
+            </div>
+            
+            {/* Contribution grid */}
+            <div className="inline-flex gap-[3px]">
+              {weeks.map((week, weekIndex) => (
+                <div key={weekIndex} className="flex flex-col gap-[3px]">
+                  {week.map((day) => {
+                    const count = entryMap[day] || 0;
+                    const intensity = 
+                      count === 0 ? 'bg-gray-800' : 
+                      count === 1 ? 'bg-[#15c460]/30' : 
+                      count === 2 ? 'bg-[#15c460]/60' : 
+                      count >= 3 ? 'bg-[#15c460]' : 'bg-gray-800';
+                    
+                    return (
+                      <div
+                        key={day}
+                        className={`
+                          w-4 h-4 rounded-sm ${intensity} 
+                          hover:ring-2 hover:ring-[#15c460] hover:ring-offset-1 hover:ring-offset-black
+                          cursor-pointer transition-all duration-200 relative
+                          ${count > 0 ? 'shadow-lg shadow-[#15c460]/20' : ''}
+                        `}
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setTooltip({
+                            day,
+                            x: rect.left + rect.width / 2,
+                            y: rect.top - 10
+                          });
+                        }}
+                        onMouseLeave={() => setTooltip({ day: null, x: 0, y: 0 })}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
+
+        {/* Vertical Legend */}
+        <div className="hidden sm:flex flex-col items-center gap-4 pr-2 select-none" aria-label="Activity intensity legend">
+          <span className="text-[10px] text-gray-400 font-semibold tracking-wide uppercase">MORE</span>
+          <div className="flex flex-col-reverse gap-2 items-center">
+            <div className="w-4 h-4 bg-gray-800 rounded-sm" />
+            <div className="w-4 h-4 bg-[#15c460]/30 rounded-sm" />
+            <div className="w-4 h-4 bg-[#15c460]/60 rounded-sm" />
+            <div className="w-4 h-4 bg-[#15c460] rounded-sm shadow-lg shadow-[#15c460]/30" />
+          </div>
+          <span className="text-[10px] text-gray-400 font-semibold tracking-wide uppercase">LESS</span>
         </div>
       </div>
 
@@ -174,16 +195,7 @@ export function ContributionGraph({ entries }: GraphProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-8 mt-8">
-        <span className="text-gray-400 text-sm font-medium">Less</span>
-        <div className="flex gap-2">
-          <div className="w-4 h-4 bg-gray-800 rounded-sm" />
-          <div className="w-4 h-4 bg-[#15c460]/30 rounded-sm" />
-          <div className="w-4 h-4 bg-[#15c460]/60 rounded-sm" />
-          <div className="w-4 h-4 bg-[#15c460] rounded-sm shadow-lg shadow-[#15c460]/30" />
-        </div>
-        <span className="text-gray-400 text-sm font-medium">More</span>
-      </div>
+  {/* Legend moved to vertical sidebar */}
     </div>
   );
 }

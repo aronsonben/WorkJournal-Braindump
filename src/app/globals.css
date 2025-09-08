@@ -17,3 +17,14 @@ body {
   color: var(--foreground);
   font-family: system-ui, sans-serif;
 }
+
+/* Utility: full-bleed background for sections whose background should span viewport
+   while their inner content stays constrained with standard max-width container. */
+.full-bleed {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+}

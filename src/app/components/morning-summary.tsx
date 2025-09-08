@@ -1,10 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-
-interface MorningSummaryCardProps {
-  onClose?: () => void;
-}
+import { useState, useEffect, useCallback } from 'react';
 
 interface MorningSummary {
   summary: string;
@@ -17,17 +13,35 @@ interface MorningSummary {
 
 interface MorningSummaryCardProps {
   onClose?: () => void;
+  /** ISO string of newest entry */
+  lastEntryCreatedAt?: string | null;
+  /** Total count of entries */
+  entryCount?: number;
+}
+const CACHE_PREFIX = 'morningSummary:v1';
+
+function buildCacheKey(days: number, lastEntryCreatedAt?: string | null, entryCount?: number) {
+  return [
+    CACHE_PREFIX,
+    `days=${days}`,
+    `last=${lastEntryCreatedAt || 'none'}`,
+    `count=${entryCount ?? 0}`
+  ].join(':');
 }
 
-export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
+export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: MorningSummaryCardProps) {
   const [summary, setSummary] = useState<MorningSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [daysToAnalyze, setDaysToAnalyze] = useState(7);
+  const [fromCache, setFromCache] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchSummary = async (days: number = 7) => {
+  const fetchSummary = useCallback(async (days: number = 7, force = false) => {
     setLoading(true);
     setError(null);
+    setFromCache(false);
+    if (force) setRefreshing(true);
     
     try {
       const response = await fetch(`/api/morning-summary?days=${days}`);
@@ -50,17 +64,47 @@ export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
         gentle_nudge: typeof data.gentle_nudge === 'string' ? data.gentle_nudge : null,
       };
       setSummary(normalized);
+      // Persist to cache
+      try {
+        const cacheKey = buildCacheKey(days, lastEntryCreatedAt, entryCount);
+        localStorage.setItem(cacheKey, JSON.stringify({
+          savedAt: Date.now(),
+          days,
+          lastEntryCreatedAt,
+          entryCount,
+          summary: normalized
+        }));
+      } catch {/* ignore quota errors */}
     } catch (err) {
       console.error('Error fetching morning summary:', err);
       setError('Unable to generate your morning summary. Please try again.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [lastEntryCreatedAt, entryCount]);
 
+  // Attempt to load from cache whenever dependencies change
   useEffect(() => {
+    const key = buildCacheKey(daysToAnalyze, lastEntryCreatedAt, entryCount);
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.summary) {
+          setSummary(parsed.summary as MorningSummary);
+          setFromCache(true);
+          setLoading(false);
+          return; // Skip fetch
+        }
+      }
+    } catch {/* ignore parse errors */}
     fetchSummary(daysToAnalyze);
-  }, [daysToAnalyze]);
+  }, [daysToAnalyze, lastEntryCreatedAt, entryCount, fetchSummary]);
+
+  const handleForceRefresh = () => {
+    fetchSummary(daysToAnalyze, true);
+  };
 
   const formatTime = () => {
     const now = new Date();
@@ -128,12 +172,20 @@ export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
         </div>
         
         <p className="text-gray-300 mb-4">{error}</p>
-        <button
-          onClick={() => fetchSummary(daysToAnalyze)}
-          className="px-4 py-2 bg-[#15c460] text-white rounded-lg hover:bg-[#12a855] transition-colors text-sm font-medium"
-        >
-          Try Again
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => fetchSummary(daysToAnalyze)}
+            className="px-4 py-2 bg-[#15c460] text-white rounded-lg hover:bg-[#12a855] transition-colors text-sm font-medium"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={handleForceRefresh}
+            className="px-4 py-2 bg-gray-800 text-gray-200 rounded-lg border border-gray-700 hover:bg-gray-700 transition-colors text-sm font-medium"
+          >
+            Force Refresh
+          </button>
+        </div>
       </div>
     );
   }
@@ -161,6 +213,14 @@ export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
             <option value={14}>Last 2 weeks</option>
             <option value={30}>Last month</option>
           </select>
+          <button
+            onClick={handleForceRefresh}
+            title="Recompute summary"
+            className="px-2 py-1 bg-gray-800 border border-gray-700 rounded-md text-gray-300 hover:bg-gray-700 text-xs flex items-center gap-1"
+            disabled={refreshing}
+          >
+            {refreshing ? '…' : '↻'}
+          </button>
           
           {onClose && (
             <button
@@ -177,13 +237,13 @@ export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
 
       {/* Main Summary */}
       <div className="mb-6">
-        <p className="text-gray-200 text-lg leading-relaxed">{summary.summary}</p>
+        <p className="text-gray-400 text-sm leading-relaxed">{summary.summary}</p>
       </div>
 
       {/* Key Themes - Simple tags above boxes */}
       {summary.main_themes.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-400 mb-3">Key Themes</h3>
+          <h3 className="text-sm font-medium text-gray-400 mb-3">Key Themes</h3>
           <div className="flex flex-wrap gap-2">
             {summary.main_themes.map((theme, index) => (
               <span key={index} className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm">

@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { SmartTip } from './smart-tip';
 import { AnalysisPopup } from './analysis-popup';
+import { useWhisper } from './useWhisper';
+import { Mic } from '@mui/icons-material';
 
 interface ComprehensiveAnalysis {
   tags: string[];
@@ -21,15 +23,38 @@ interface ComprehensiveAnalysis {
 export function EntryInput({ onSave }: { onSave: () => void }) {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [showAnalysisPopup, setShowAnalysisPopup] = useState(false);
   const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
   const [showTip, setShowTip] = useState(false);
   const [savedTip, setSavedTip] = useState<string | null>(null);
 
-  // Word count calculation (local only, no API calls)
+  // Whisper hook for live voice captioning
+  const whisper = useWhisper();
+
+  // Initialize Whisper on component mount
+  useEffect(() => {
+    if (!whisper.isModelReady && !whisper.isModelLoading && !whisper.error) {
+      whisper.initializeModel();
+    }
+  }, [whisper]);
+
+  const toggleRecording = useCallback(async () => {
+    if (whisper.isRecording) {
+      const transcript = await whisper.stopRecording();
+      if (transcript) {
+        setContent(prev => {
+          const cleaned = transcript.trim();
+          return prev + (prev ? ' ' : '') + cleaned;
+        });
+        whisper.clearTranscript();
+      }
+    } else {
+      await whisper.startRecording();
+    }
+  }, [whisper]);
+
+  // Word count calculation
   const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
-  const charCount = content.length;
 
   async function handleSaveClick() {
     if (!content.trim()) return;
@@ -111,50 +136,106 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         }}
       />
 
-      {/* Story Elements removed - now shown in analysis popup on save */}
-
-      <div className={`
-        relative rounded-2xl border-2 transition-all duration-200 overflow-hidden
-        ${focused ? 'border-[#15c460] shadow-xl shadow-[#15c460]/10' : 'border-gray-700'}
-      `}>
+      <div className="relative bg-gray-800/90 overflow-hidden transition-all focus-within:ring-2 focus-within:ring-[#15c460]">
         <textarea
-          className="w-full p-6 bg-gray-800 text-gray-100 rounded-t-2xl resize-none focus:outline-none text-lg leading-relaxed placeholder-gray-400"
+          className="w-full p-6 bg-transparent text-gray-100 resize-none focus:outline-none text-base md:text-lg leading-relaxed placeholder-gray-500 font-medium"
           rows={8}
           placeholder="Start writing about your work day..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
         />
         
-        {/* Character count bar (Grammarly style) */}
-        <div className="px-6 py-4 bg-gray-850 border-t border-gray-700">
-          <div className="flex justify-between items-center">
-            <div className="flex gap-4 text-sm text-gray-400">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-[#15c460] rounded-full"></span>
-                {wordCount} words
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-gray-500 rounded-full"></span>
-                {charCount} characters
-              </span>
+        {/* Live transcript overlay - shows what's being captured */}
+        {(whisper.isRecording || whisper.isTranscribing || whisper.transcript || whisper.error || whisper.isModelLoading) && (
+          <div className="absolute bottom-16 left-0 right-0 px-6">
+            <div className="bg-blue-900/80 backdrop-blur-sm rounded-lg p-3 border border-blue-600/50">
+              <div className="text-xs text-blue-300 font-medium mb-1 flex items-center gap-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${whisper.error ? 'bg-yellow-400 animate-ping' : whisper.isRecording ? 'bg-red-500 animate-pulse' : 'bg-blue-400'}`}></span>
+                {whisper.error ? 'Whisper load failed' : 'Whisper AI Live Captioning'}
+                {whisper.isTranscribing && ' - Processing...'}
+              </div>
+              {whisper.isModelLoading && (
+                <div className="mb-2">
+                  <div className="h-1.5 w-full bg-blue-950/60 rounded overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 transition-all" style={{ width: `${Math.round(whisper.loadingProgress * 100)}%` }} />
+                  </div>
+                  <div className="text-[10px] mt-1 text-blue-300 tracking-wide">Loading model {Math.round(whisper.loadingProgress * 100)}%</div>
+                </div>
+              )}
+              {whisper.error && !whisper.isModelLoading && (
+                <div className="text-xs text-yellow-300 flex items-center justify-between gap-3">
+                  <span>{whisper.error}</span>
+                  <button
+                    onClick={() => whisper.initializeModel()}
+                    className="px-2 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/40 rounded text-yellow-200 text-[10px] font-semibold"
+                  >RETRY</button>
+                </div>
+              )}
+              {!whisper.error && (
+                <div className="text-sm text-blue-100 min-h-[1.25rem]">
+                  {whisper.isTranscribing ? (
+                    <span className="text-blue-300 italic">🔄 AI is processing audio...</span>
+                  ) : whisper.transcript ? (
+                    whisper.transcript
+                  ) : whisper.isRecording ? (
+                    <span className="text-blue-300/60 italic">Listening...</span>
+                  ) : null}
+                </div>
+              )}
             </div>
+          </div>
+        )}
+
+        <div className="px-6 py-4 flex flex-col gap-2 md:flex-row md:justify-between md:items-center">
+          <div className="flex items-center gap-4 text-xs text-gray-400">
+            <span>
+              {whisper.error && !whisper.isModelLoading && '⚠️ Whisper failed'}
+              {!whisper.error && (
+                whisper.isModelReady ? (
+                  whisper.isRecording ? '🔴 Recording…' : (whisper.isModelLoading ? '⏳ Loading Whisper…' : '')
+                ) : whisper.isModelLoading ? '⏳ Loading Whisper…' : '🤖 Preparing…'
+              )}
+            </span>
+          </div>
+          
+          <div className="flex gap-3 self-end md:self-auto">
+            <button
+              onClick={toggleRecording}
+              disabled={whisper.isTranscribing || !whisper.isModelReady || !!whisper.error || whisper.isModelLoading}
+              className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                whisper.isRecording
+                  ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
+                  : whisper.isTranscribing
+                  ? 'bg-yellow-600 text-white cursor-not-allowed'
+                  : whisper.isModelLoading
+                    ? 'bg-gray-700 text-gray-400 cursor-wait'
+                    : whisper.error
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+              }`}
+              title={
+                whisper.isTranscribing ? 'AI is processing...' :
+                whisper.isRecording ? 'Stop recording' : 
+                'Start voice recording'
+              }
+            >
+              {whisper.isTranscribing ? '⏳ AI' : 
+               whisper.isRecording ? '⏹️ STOP' : 
+               whisper.isModelLoading ? '⏳ INIT' : <Mic fontSize="small" />}
+            </button>
+            
             <button
               onClick={handleSaveClick}
               disabled={saving || !content.trim()}
-              className="px-6 py-3 bg-[#15c460] text-white rounded-xl hover:bg-[#12a855] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
+              className="px-6 py-2 bg-[#15c460] hover:bg-[#11a652] text-black font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {saving ? (
                 <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving...
+                  <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  SAVING
                 </span>
               ) : (
-                <span className="flex items-center gap-2">
-                  <span>✨</span>
-                  Save Entry
-                </span>
+                <span className="flex items-center gap-2">✨ SAVE</span>
               )}
             </button>
           </div>
