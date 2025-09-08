@@ -2,19 +2,36 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { StoryElements } from './story-elements';
+import { SmartTip } from './smart-tip';
+
+interface ComprehensiveAnalysis {
+  tags: string[];
+  detected_elements: {
+    context: boolean;
+    challenge: boolean;
+    action: boolean;
+    impact: boolean;
+  };
+  entry_type: 'short' | 'problem' | 'achievement' | 'reflection' | 'routine';
+  suggested_tip: string | null;
+  depth_score: number;
+}
 
 export function EntryInput({ onSave }: { onSave: () => void }) {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [generatingTags, setGeneratingTags] = useState(false);
-  const [previewTags, setPreviewTags] = useState<string[]>([]);
+  const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
+  const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
+  const [showTip, setShowTip] = useState(false);
+  const [savedTip, setSavedTip] = useState<string | null>(null);
 
-  // Generate tags preview as user types - using useEffect directly to avoid callback dependency issues
+  // Generate comprehensive analysis as user types
   useEffect(() => {
     const debounceTimeout = setTimeout(async () => {
-      if (content.trim().length > 20 && !generatingTags) {
-        setGeneratingTags(true);
+      if (content.trim().length > 20 && !generatingAnalysis) {
+        setGeneratingAnalysis(true);
         try {
           const response = await fetch('/api/generate-tags', {
             method: 'POST',
@@ -23,21 +40,21 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
           });
           
           if (response.ok) {
-            const { tags } = await response.json();
-            setPreviewTags(tags || []);
+            const analysisData: ComprehensiveAnalysis = await response.json();
+            setAnalysis(analysisData);
           }
         } catch (error) {
-          console.error('Failed to generate tags preview:', error);
+          console.error('Failed to generate analysis:', error);
         }
-        setGeneratingTags(false);
+        setGeneratingAnalysis(false);
       } else if (content.trim().length <= 20) {
-        setPreviewTags([]);
+        setAnalysis(null);
       }
-    }, 1500); // Increased debounce to 1.5 seconds to reduce API calls
+    }, 1500);
 
     return () => clearTimeout(debounceTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]); // Only depend on content to prevent infinite loops
+  }, [content]); // Only depend on content to prevent infinite loop with generatingAnalysis
 
   async function saveEntry() {
     if (!content.trim()) return;
@@ -45,9 +62,9 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
     setSaving(true);
     
     try {
-      // Generate final tags for saving
-      let finalTags = previewTags;
-      if (finalTags.length === 0 && content.trim().length > 10) {
+      // Use existing analysis or generate final one
+      let finalAnalysis = analysis;
+      if (!finalAnalysis && content.trim().length > 10) {
         const response = await fetch('/api/generate-tags', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -55,8 +72,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         });
         
         if (response.ok) {
-          const { tags } = await response.json();
-          finalTags = tags || [];
+          finalAnalysis = await response.json();
         }
       }
 
@@ -65,12 +81,18 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         .insert({
           content,
           word_count: content.split(/\s+/).length,
-          ...(finalTags.length > 0 && { tags: finalTags }),
+          ...(finalAnalysis?.tags && finalAnalysis.tags.length > 0 && { tags: finalAnalysis.tags }),
         });
 
       if (!error) {
+        // Show smart tip after saving
+        if (finalAnalysis?.suggested_tip) {
+          setSavedTip(finalAnalysis.suggested_tip);
+          setShowTip(true);
+        }
+        
         setContent('');
-        setPreviewTags([]);
+        setAnalysis(null);
         onSave();
       }
     } catch (error) {
@@ -85,6 +107,26 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
 
   return (
     <div className="space-y-4">
+      {/* Smart Tip - Shows after saving */}
+      <SmartTip
+        suggested_tip={savedTip}
+        show={showTip}
+        onDismiss={() => {
+          setShowTip(false);
+          setSavedTip(null);
+        }}
+      />
+
+      {/* Story Elements & Depth Indicator - Combined minimal design */}
+      {(content.trim().length > 20 || generatingAnalysis) && (
+        <StoryElements
+          detected_elements={analysis?.detected_elements || null}
+          depth_score={analysis?.depth_score || null}
+          tags={analysis?.tags || []}
+          loading={generatingAnalysis}
+        />
+      )}
+
       <div className={`
         relative rounded-2xl border-2 transition-all duration-200 overflow-hidden
         ${focused ? 'border-[#15c460] shadow-xl shadow-[#15c460]/10' : 'border-gray-700'}
@@ -98,32 +140,6 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
-        
-        {/* Tags Preview */}
-        {(previewTags.length > 0 || generatingTags) && (
-          <div className="px-6 py-3 bg-gray-700 border-t border-gray-600">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-400">AI Tags:</span>
-              {generatingTags ? (
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 border-2 border-gray-500 border-t-[#15c460] rounded-full animate-spin" />
-                  <span className="text-gray-400">Generating...</span>
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {previewTags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-[#15c460]/20 text-[#15c460] rounded-md text-xs font-medium border border-[#15c460]/30"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
         
         {/* Character count bar (Grammarly style) */}
         <div className="px-6 py-4 bg-gray-850 border-t border-gray-700">
@@ -158,6 +174,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
