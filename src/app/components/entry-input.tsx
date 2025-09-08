@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { StoryElements } from './story-elements';
 import { SmartTip } from './smart-tip';
+import { AnalysisPopup } from './analysis-popup';
 
 interface ComprehensiveAnalysis {
   tags: string[];
@@ -22,88 +22,82 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
+  const [showAnalysisPopup, setShowAnalysisPopup] = useState(false);
   const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
   const [showTip, setShowTip] = useState(false);
   const [savedTip, setSavedTip] = useState<string | null>(null);
 
-  // Generate comprehensive analysis as user types
-  useEffect(() => {
-    const debounceTimeout = setTimeout(async () => {
-      if (content.trim().length > 20 && !generatingAnalysis) {
-        setGeneratingAnalysis(true);
-        try {
-          const response = await fetch('/api/generate-tags', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content }),
-          });
-          
-          if (response.ok) {
-            const analysisData: ComprehensiveAnalysis = await response.json();
-            setAnalysis(analysisData);
-          }
-        } catch (error) {
-          console.error('Failed to generate analysis:', error);
-        }
-        setGeneratingAnalysis(false);
-      } else if (content.trim().length <= 20) {
-        setAnalysis(null);
-      }
-    }, 1500);
+  // Word count calculation (local only, no API calls)
+  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+  const charCount = content.length;
 
-    return () => clearTimeout(debounceTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]); // Only depend on content to prevent infinite loop with generatingAnalysis
-
-  async function saveEntry() {
+  async function handleSaveClick() {
     if (!content.trim()) return;
     
     setSaving(true);
     
     try {
-      // Use existing analysis or generate final one
-      let finalAnalysis = analysis;
-      if (!finalAnalysis && content.trim().length > 10) {
-        const response = await fetch('/api/generate-tags', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-        });
-        
-        if (response.ok) {
-          finalAnalysis = await response.json();
-        }
-      }
-
-      const { error } = await supabase
-        .from('entries')
-        .insert({
-          content,
-          word_count: content.split(/\s+/).length,
-          ...(finalAnalysis?.tags && finalAnalysis.tags.length > 0 && { tags: finalAnalysis.tags }),
-        });
-
-      if (!error) {
-        // Show smart tip after saving
-        if (finalAnalysis?.suggested_tip) {
-          setSavedTip(finalAnalysis.suggested_tip);
-          setShowTip(true);
-        }
-        
-        setContent('');
-        setAnalysis(null);
-        onSave();
+      // Generate analysis for the popup
+      const response = await fetch('/api/generate-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      
+      if (response.ok) {
+        const analysisData: ComprehensiveAnalysis = await response.json();
+        setAnalysis(analysisData);
+        setShowAnalysisPopup(true);
+      } else {
+        // If analysis fails, save directly
+        await saveEntryDirectly();
       }
     } catch (error) {
-      console.error('Failed to save entry:', error);
+      console.error('Failed to generate analysis:', error);
+      // If analysis fails, save directly
+      await saveEntryDirectly();
     }
     
     setSaving(false);
   }
 
-  const wordCount = content.split(/\s+/).filter(Boolean).length;
-  const charCount = content.length;
+  async function saveEntryDirectly(finalAnalysis?: ComprehensiveAnalysis) {
+    try {
+      const { error } = await supabase
+        .from('entries')
+        .insert({
+          content,
+          word_count: wordCount,
+          tags: finalAnalysis?.tags || []
+        });
+
+      if (error) throw error;
+
+      // Show tip if analysis provided one
+      if (finalAnalysis?.suggested_tip) {
+        setSavedTip(finalAnalysis.suggested_tip);
+        setShowTip(true);
+        setTimeout(() => setShowTip(false), 5000);
+      }
+
+      setContent('');
+      setAnalysis(null);
+      setShowAnalysisPopup(false);
+      onSave();
+    } catch (error) {
+      console.error('Error saving entry:', error);
+    }
+  }
+
+  function handleEnhanceEntry() {
+    // Keep analysis and close popup, return to editing
+    setShowAnalysisPopup(false);
+  }
+
+  function handleSaveAsIs() {
+    // Save with current analysis
+    saveEntryDirectly(analysis || undefined);
+  }
 
   return (
     <div className="space-y-4">
@@ -117,15 +111,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         }}
       />
 
-      {/* Story Elements & Depth Indicator - Combined minimal design */}
-      {(content.trim().length > 20 || generatingAnalysis) && (
-        <StoryElements
-          detected_elements={analysis?.detected_elements || null}
-          depth_score={analysis?.depth_score || null}
-          tags={analysis?.tags || []}
-          loading={generatingAnalysis}
-        />
-      )}
+      {/* Story Elements removed - now shown in analysis popup on save */}
 
       <div className={`
         relative rounded-2xl border-2 transition-all duration-200 overflow-hidden
@@ -155,7 +141,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
               </span>
             </div>
             <button
-              onClick={saveEntry}
+              onClick={handleSaveClick}
               disabled={saving || !content.trim()}
               className="px-6 py-3 bg-[#15c460] text-white rounded-xl hover:bg-[#12a855] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
             >
@@ -175,6 +161,15 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         </div>
       </div>
 
+      {/* Analysis Popup */}
+      <AnalysisPopup
+        analysis={analysis}
+        show={showAnalysisPopup}
+        onEnhance={handleEnhanceEntry}
+        onSaveAsIs={handleSaveAsIs}
+        onClose={() => setShowAnalysisPopup(false)}
+        wordCount={wordCount}
+      />
     </div>
   );
 }

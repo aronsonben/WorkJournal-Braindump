@@ -46,8 +46,29 @@ interface ComprehensiveAnalysis {
   depth_score: number;
 }
 
+// Rate limiting state
+let lastApiCall = 0;
+const MIN_API_INTERVAL = 2000; // 2 seconds between API calls
+
 async function generateComprehensiveAnalysis(content: string): Promise<ComprehensiveAnalysis> {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  
+  if (!GEMINI_API_KEY) {
+    console.warn('GEMINI_API_KEY not found, using fallback analysis');
+    return generateFallbackAnalysis(content);
+  }
+
+  // Rate limiting check
+  const now = Date.now();
+  const timeSinceLastCall = now - lastApiCall;
+  
+  if (timeSinceLastCall < MIN_API_INTERVAL) {
+    const waitTime = MIN_API_INTERVAL - timeSinceLastCall;
+    console.log(`Rate limiting: waiting ${waitTime}ms before API call`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  
+  lastApiCall = Date.now();
   
   if (!GEMINI_API_KEY) {
     console.warn('GEMINI_API_KEY not found, using fallback analysis');
@@ -122,11 +143,15 @@ Return ONLY valid JSON:
 Remember: Be generous in detection. If something is even slightly present, mark it true. We want to encourage documentation, not critique it.`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
       body: JSON.stringify({
         contents: [{
           parts: [{
@@ -139,8 +164,14 @@ Remember: Be generous in detection. If something is even slightly present, mark 
         }
       })
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
+      if (response.status === 429) {
+        console.log('Rate limited, using fallback analysis');
+        return generateFallbackAnalysis(content);
+      }
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
@@ -197,6 +228,10 @@ Remember: Be generous in detection. If something is even slightly present, mark 
     
   } catch (error) {
     console.error('Error calling Gemini API:', error);
+    // If it's a rate limit or timeout, gracefully fall back
+    if (error instanceof Error && (error.message.includes('429') || error.name === 'AbortError')) {
+      console.log('Using fallback due to rate limit or timeout');
+    }
     return generateFallbackAnalysis(content);
   }
 }
@@ -237,7 +272,7 @@ function generateFallbackAnalysis(content: string): ComprehensiveAnalysis {
   } else if (entry_type === 'short' && !detected_elements.context) {
     suggested_tip = "💡 Consider adding which project or technology this relates to";
   } else if (detected_elements.challenge && !detected_elements.action) {
-    suggested_tip = "� You've identified the challenge - what approach are you taking to solve it?";
+    suggested_tip = "🔍 You've identified the challenge - what approach are you taking to solve it?";
   } else if (detected_elements.action && !detected_elements.impact) {
     suggested_tip = "📈 Great work! Consider noting the outcome or what this achievement unlocks";
   } else if (detected_elements.context && detected_elements.action && !detected_elements.challenge && !detected_elements.impact) {

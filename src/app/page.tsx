@@ -5,11 +5,13 @@ import { supabase, Entry } from '../lib/supabase';
 import { EntryInput } from './components/entry-input';
 import { ContributionGraph } from './components/contribution-graph';
 import { EntryCard } from './components/entry-card';
+import { MorningSummaryCard } from './components/morning-summary';
 
 export default function Home() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showMorningSummary, setShowMorningSummary] = useState(true);
 
   async function loadEntries() {
     setLoading(true);
@@ -83,6 +85,15 @@ export default function Home() {
           </div>
         </div>
       </nav>
+
+      {/* Morning Summary Section */}
+      {showMorningSummary && (
+        <section className="w-full bg-black py-6">
+          <div className="max-w-7xl mx-auto px-8">
+            <MorningSummaryCard onClose={() => setShowMorningSummary(false)} />
+          </div>
+        </section>
+      )}
 
       {/* Full-width Activity Overview */}
       <section className="w-full bg-black py-8">
