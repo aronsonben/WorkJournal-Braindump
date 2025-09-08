@@ -13,6 +13,63 @@ interface MorningSummaryResponse {
   gentle_nudge: string | null;
 }
 
+async function filterCompletedTasks(analysis: MorningSummaryResponse): Promise<MorningSummaryResponse> {
+  try {
+    // Fetch completed entries from database
+    const { data: completedEntries, error } = await supabase
+      .from('entries')
+      .select('content')
+      .eq('status', 'completed');
+
+    if (error) {
+      console.error('Error fetching completed entries:', error);
+      return analysis; // Return original if query fails
+    }
+
+    if (!completedEntries || completedEntries.length === 0) {
+      return analysis; // No completed entries to filter
+    }
+
+    // Create a set of completed entry content for fast lookup
+    const completedTasksSet = new Set(
+      completedEntries.map(entry => entry.content.toLowerCase().trim())
+    );
+
+    // Filter way_ahead items that aren't similar to completed entries
+    const filteredWayAhead = analysis.way_ahead.filter(item => {
+      const itemLower = item.toLowerCase().trim();
+      
+      // Check for exact matches first
+      if (completedTasksSet.has(itemLower)) {
+        return false;
+      }
+      
+      // Check for similarity (simple keyword matching)
+      return !Array.from(completedTasksSet).some((completed: string) => {
+        // If items share significant keywords, consider them similar
+        const completedWords = completed.split(/\s+/).filter((word: string) => word.length > 3);
+        const itemWords = itemLower.split(/\s+/).filter((word: string) => word.length > 3);
+        
+        const sharedWords = completedWords.filter((word: string) => 
+          itemWords.some((itemWord: string) => itemWord.includes(word) || word.includes(itemWord))
+        );
+        
+        // If more than 60% of words overlap, consider it completed
+        return sharedWords.length > completedWords.length * 0.6;
+      });
+    });
+
+    return {
+      ...analysis,
+      way_ahead: filteredWayAhead
+    };
+
+  } catch (error) {
+    console.error('Error filtering completed tasks:', error);
+    return analysis; // Return original analysis on error
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -47,9 +104,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Generate analysis using LLM
+    // Generate analysis using LLM, filtering out completed tasks
     const analysis = await generateMorningSummary(entries, days);
-    return NextResponse.json(analysis);
+    
+    // Filter out completed tasks from way_ahead
+    const filteredAnalysis = await filterCompletedTasks(analysis);
+    return NextResponse.json(filteredAnalysis);
 
   } catch (error) {
     console.error('Error generating morning summary:', error);

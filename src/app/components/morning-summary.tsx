@@ -1,14 +1,21 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../lib/supabase';
 
 interface MorningSummary {
   summary: string;
   main_themes: string[];
-  past_accomplishments: string[];
   way_ahead: string[];
   pattern_insight: string;
   gentle_nudge: string | null;
+}
+
+interface TaskCard {
+  id?: string;
+  content: string;
+  status: 'todo' | 'in_progress' | 'completed' | 'cancelled';
+  isNew?: boolean;
 }
 
 interface MorningSummaryCardProps {
@@ -18,7 +25,8 @@ interface MorningSummaryCardProps {
   /** Total count of entries */
   entryCount?: number;
 }
-const CACHE_PREFIX = 'morningSummary:v1';
+
+const CACHE_PREFIX = 'morningSummary:v2';
 
 function buildCacheKey(days: number, lastEntryCreatedAt?: string | null, entryCount?: number) {
   return [
@@ -34,13 +42,12 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [daysToAnalyze, setDaysToAnalyze] = useState(7);
-  const [fromCache, setFromCache] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [tasks, setTasks] = useState<TaskCard[]>([]);
 
   const fetchSummary = useCallback(async (days: number = 7, force = false) => {
     setLoading(true);
     setError(null);
-    setFromCache(false);
     if (force) setRefreshing(true);
     
     try {
@@ -50,20 +57,29 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
       }
       
       const data = await response.json();
-      // Normalize in case API returned legacy field names (defensive)
+      
+      // Filter out completed items from way_ahead (only show incomplete tasks)
+      const filteredWayAhead = Array.isArray(data.way_ahead) 
+        ? data.way_ahead.filter((item: string) => item && item.trim())
+        : [];
+        
       const normalized: MorningSummary = {
         summary: data.summary || '',
         main_themes: Array.isArray(data.main_themes) ? data.main_themes : [],
-        past_accomplishments: Array.isArray(data.past_accomplishments)
-          ? data.past_accomplishments
-          : (Array.isArray(data.momentum_items) ? data.momentum_items : []),
-        way_ahead: Array.isArray(data.way_ahead)
-          ? data.way_ahead
-          : (Array.isArray(data.attention_needed) ? data.attention_needed : []),
+        way_ahead: filteredWayAhead,
         pattern_insight: typeof data.pattern_insight === 'string' ? data.pattern_insight : '',
         gentle_nudge: typeof data.gentle_nudge === 'string' ? data.gentle_nudge : null,
       };
       setSummary(normalized);
+
+      // Convert way_ahead items to task cards
+      const taskCards: TaskCard[] = filteredWayAhead.map((item: string) => ({
+        content: item,
+        status: 'todo' as const,
+        isNew: true
+      }));
+      setTasks(taskCards);
+
       // Persist to cache
       try {
         const cacheKey = buildCacheKey(days, lastEntryCreatedAt, entryCount);
@@ -72,7 +88,8 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
           days,
           lastEntryCreatedAt,
           entryCount,
-          summary: normalized
+          summary: normalized,
+          tasks: taskCards
         }));
       } catch {/* ignore quota errors */}
     } catch (err) {
@@ -93,7 +110,7 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
         const parsed = JSON.parse(raw);
         if (parsed && parsed.summary) {
           setSummary(parsed.summary as MorningSummary);
-          setFromCache(true);
+          setTasks(parsed.tasks || []);
           setLoading(false);
           return; // Skip fetch
         }
@@ -101,6 +118,33 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
     } catch {/* ignore parse errors */}
     fetchSummary(daysToAnalyze);
   }, [daysToAnalyze, lastEntryCreatedAt, entryCount, fetchSummary]);
+
+  const handleTaskStatusChange = async (taskIndex: number, newStatus: TaskCard['status']) => {
+    const updatedTasks = [...tasks];
+    updatedTasks[taskIndex] = { ...updatedTasks[taskIndex], status: newStatus };
+    setTasks(updatedTasks);
+
+    // If marking as completed, save as a new entry
+    if (newStatus === 'completed' && updatedTasks[taskIndex].isNew) {
+      try {
+        const { error } = await supabase
+          .from('entries')
+          .insert({
+            content: `✅ ${updatedTasks[taskIndex].content}`,
+            status: 'completed',
+            word_count: updatedTasks[taskIndex].content.split(/\s+/).length
+          });
+        
+        if (error) {
+          console.error('Error saving completed task as entry:', error);
+        } else {
+          updatedTasks[taskIndex].isNew = false;
+        }
+      } catch (err) {
+        console.error('Error saving entry:', err);
+      }
+    }
+  };
 
   const handleForceRefresh = () => {
     fetchSummary(daysToAnalyze, true);
@@ -254,42 +298,83 @@ export function MorningSummaryCard({ onClose, lastEntryCreatedAt, entryCount }: 
         </div>
       )}
 
-      {/* Two-Box Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Past History Box */}
-        {summary.past_accomplishments.length > 0 && (
-          <div className="bg-[#15c460]/10 border border-[#15c460]/20 rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#15c460] mb-3 flex items-center gap-2">
-              <span>�</span> Past History
-            </h3>
-            <ul className="space-y-2">
-              {summary.past_accomplishments.map((item, index) => (
-                <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                  <span className="text-[#15c460] mt-1">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Way Ahead Box */}
-        {summary.way_ahead.length > 0 && (
+      {/* Way Ahead - Interactive Task Cards */}
+      {tasks.length > 0 && (
+        <div className="mb-6">
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-yellow-400 mb-4 flex items-center gap-2">
               <span>🎯</span> Way Ahead
             </h3>
-            <ul className="space-y-2">
-              {summary.way_ahead.map((item, index) => (
-                <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                  <span className="text-yellow-400 mt-1">•</span>
-                  <span>{item}</span>
-                </li>
+            <div className="grid gap-3">
+              {tasks.map((task, index) => (
+                <div 
+                  key={index}
+                  className={`bg-gray-800/50 border rounded-lg p-4 transition-all ${
+                    task.status === 'completed' 
+                      ? 'border-green-500/30 bg-green-500/5' 
+                      : task.status === 'in_progress'
+                      ? 'border-blue-500/30 bg-blue-500/5'
+                      : 'border-gray-600/30 hover:border-yellow-400/40'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <button
+                      onClick={() => handleTaskStatusChange(index, 
+                        task.status === 'completed' ? 'todo' : 
+                        task.status === 'todo' ? 'in_progress' :
+                        'completed'
+                      )}
+                      className={`flex-shrink-0 w-6 h-6 rounded border-2 transition-colors flex items-center justify-center text-xs ${
+                        task.status === 'completed'
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : task.status === 'in_progress'
+                          ? 'bg-blue-500 border-blue-500 text-white'
+                          : 'border-gray-400 hover:border-yellow-400'
+                      }`}
+                      title={
+                        task.status === 'completed' ? 'Mark as todo' :
+                        task.status === 'todo' ? 'Mark as in progress' :
+                        'Mark as completed'
+                      }
+                    >
+                      {task.status === 'completed' && '✓'}
+                      {task.status === 'in_progress' && '⋯'}
+                    </button>
+                    
+                    <div className="flex-1">
+                      <p className={`text-sm ${
+                        task.status === 'completed' 
+                          ? 'text-gray-400 line-through' 
+                          : 'text-gray-300'
+                      }`}>
+                        {task.content}
+                      </p>
+                      
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          task.status === 'completed'
+                            ? 'bg-green-500/20 text-green-300'
+                            : task.status === 'in_progress'
+                            ? 'bg-blue-500/20 text-blue-300'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {task.status === 'completed' ? 'Done' :
+                           task.status === 'in_progress' ? 'In Progress' :
+                           'To Do'}
+                        </span>
+                        
+                        {task.isNew && task.status === 'completed' && (
+                          <span className="text-xs text-green-400">✨ Added to completed list</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Gentle Nudge */}
       {summary.gentle_nudge && (

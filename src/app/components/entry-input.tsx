@@ -27,6 +27,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
   const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
   const [showTip, setShowTip] = useState(false);
   const [savedTip, setSavedTip] = useState<string | null>(null);
+  const [entryStatus, setEntryStatus] = useState<'in_progress' | 'completed'>('in_progress');
 
   // Whisper hook for live voice captioning
   const whisper = useWhisper();
@@ -93,7 +94,8 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
         .insert({
           content,
           word_count: wordCount,
-          tags: finalAnalysis?.tags || []
+          tags: finalAnalysis?.tags || [],
+          status: entryStatus
         });
 
       if (error) throw error;
@@ -106,6 +108,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
       }
 
       setContent('');
+      setEntryStatus('in_progress');
       setAnalysis(null);
       setShowAnalysisPopup(false);
       onSave();
@@ -186,7 +189,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
           </div>
         )}
 
-        <div className="px-6 py-4 flex flex-col gap-2 md:flex-row md:justify-between md:items-center">
+        <div className="px-6 py-4 flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
           <div className="flex items-center gap-4 text-xs text-gray-400">
             <span>
               {whisper.error && !whisper.isModelLoading && '⚠️ Whisper failed'}
@@ -197,8 +200,21 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
               )}
             </span>
           </div>
-          
-          <div className="flex gap-3 self-end md:self-auto">
+
+          <div className="flex items-center gap-3">
+            {/* Status Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Status:</span>
+              <select
+                value={entryStatus}
+                onChange={(e) => setEntryStatus(e.target.value as 'in_progress' | 'completed')}
+                className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#15c460]/50"
+              >
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            
             <button
               onClick={toggleRecording}
               disabled={whisper.isTranscribing || !whisper.isModelReady || !!whisper.error || whisper.isModelLoading}
