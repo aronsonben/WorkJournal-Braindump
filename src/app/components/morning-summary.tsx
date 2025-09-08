@@ -36,7 +36,20 @@ export function MorningSummaryCard({ onClose }: MorningSummaryCardProps) {
       }
       
       const data = await response.json();
-      setSummary(data);
+      // Normalize in case API returned legacy field names (defensive)
+      const normalized: MorningSummary = {
+        summary: data.summary || '',
+        main_themes: Array.isArray(data.main_themes) ? data.main_themes : [],
+        past_accomplishments: Array.isArray(data.past_accomplishments)
+          ? data.past_accomplishments
+          : (Array.isArray(data.momentum_items) ? data.momentum_items : []),
+        way_ahead: Array.isArray(data.way_ahead)
+          ? data.way_ahead
+          : (Array.isArray(data.attention_needed) ? data.attention_needed : []),
+        pattern_insight: typeof data.pattern_insight === 'string' ? data.pattern_insight : '',
+        gentle_nudge: typeof data.gentle_nudge === 'string' ? data.gentle_nudge : null,
+      };
+      setSummary(normalized);
     } catch (err) {
       console.error('Error fetching morning summary:', err);
       setError('Unable to generate your morning summary. Please try again.');

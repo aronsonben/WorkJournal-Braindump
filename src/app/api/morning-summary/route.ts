@@ -38,12 +38,12 @@ export async function GET(request: NextRequest) {
 
     if (!entries || entries.length === 0) {
       return NextResponse.json({
-        summary: "Welcome to a fresh start! No recent entries to analyze, but every great journey begins with a single step.",
+        summary: "Welcome to a fresh start! No recent entries to analyze yet—today's a great day to begin.",
         main_themes: [],
-        momentum_items: [],
-        attention_needed: ["Start documenting your work journey"],
-        pattern_insight: "New beginnings are opportunities to establish great habits.",
-        gentle_nudge: "Consider adding your first entry to capture today's focus."
+        past_accomplishments: [],
+        way_ahead: ["Create your first entry describing today's focus"],
+        pattern_insight: "Establishing a daily logging habit early builds powerful reflection data.",
+        gentle_nudge: "Add a quick note about what you're starting with today."
       });
     }
 
@@ -204,7 +204,7 @@ Remember: If you can't be specific because their entries lack detail, acknowledg
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second timeout
     
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b-latest:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -233,8 +233,8 @@ Remember: If you can't be specific because their entries lack detail, acknowledg
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    let generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const data = await response.json();
+  let generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!generatedText) {
       throw new Error('No content generated from Gemini');
@@ -250,14 +250,27 @@ Remember: If you can't be specific because their entries lack detail, acknowledg
     }
 
     try {
-      const analysis: MorningSummaryResponse = JSON.parse(generatedText);
-      
-      // Validate structure
-      if (!analysis.summary || !Array.isArray(analysis.main_themes)) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response needs runtime normalization
+  const raw: any = JSON.parse(generatedText);
+
+      const normalized: MorningSummaryResponse = {
+        summary: raw.summary || '',
+        main_themes: Array.isArray(raw.main_themes) ? raw.main_themes : [],
+        past_accomplishments: Array.isArray(raw.past_accomplishments)
+          ? raw.past_accomplishments
+          : (Array.isArray(raw.momentum_items) ? raw.momentum_items : []),
+        way_ahead: Array.isArray(raw.way_ahead)
+          ? raw.way_ahead
+          : (Array.isArray(raw.attention_needed) ? raw.attention_needed : []),
+        pattern_insight: typeof raw.pattern_insight === 'string' ? raw.pattern_insight : '',
+        gentle_nudge: typeof raw.gentle_nudge === 'string' ? raw.gentle_nudge : null
+      };
+
+      if (!normalized.summary) {
         throw new Error('Invalid response structure');
       }
 
-      return analysis;
+      return normalized;
       
     } catch (parseError) {
       console.error('Error parsing Gemini JSON response:', parseError);
