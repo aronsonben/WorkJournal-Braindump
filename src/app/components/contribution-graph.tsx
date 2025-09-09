@@ -123,11 +123,12 @@ export function ContributionGraph({ entries }: GraphProps) {
                 <div key={weekIndex} className="flex flex-col gap-[3px]">
                   {week.map((day) => {
                     const count = entryMap[day] || 0;
-                    const intensity = 
-                      count === 0 ? 'bg-gray-800' : 
-                      count === 1 ? 'bg-[#15c460]/30' : 
-                      count === 2 ? 'bg-[#15c460]/60' : 
-                      count >= 3 ? 'bg-[#15c460]' : 'bg-gray-800';
+                    // Levels: 0, 1-3, 4-8, >8
+                    const intensity =
+                      count === 0 ? 'bg-gray-800' :
+                      count <= 3 ? 'bg-[#15c460]/30' :
+                      count <= 8 ? 'bg-[#15c460]/60' :
+                      'bg-[#15c460]';
                     
                     return (
                       <div

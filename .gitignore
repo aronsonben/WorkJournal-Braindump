@@ -39,3 +39,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# electron widget
+/electron-widget/node_modules/
+/electron-widget/dist/
+/electron-widget/out/
+/electron-widget/build/
+/electron-widget/*.log
+/electron-widget/.env
+/electron-widget/.env.*
+/electron-widget/debug.log
+/electron-widget/debug.bat
+/electron-widget/setup.bat
+/electron-widget/*.tmp
+/electron-widget/*.lock
+/electron-widget/installer.*
+/electron-widget/*.exe
+/electron-widget/*.msi
+/electron-widget/*.7z
+/electron-widget/*.zip
+/electron-widget/*.dmg
