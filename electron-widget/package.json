@@ -1,0 +1,47 @@
+{
+  "name": "workjournal-desktop-widget",
+  "version": "1.0.0",
+  "description": "Desktop widget for WorkJournal entry input",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win",
+    "build-win": "electron-builder --win",
+    "dist": "npm run build"
+  },
+  "keywords": ["workjournal", "desktop", "widget", "electron"],
+  "author": "WorkJournal",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  },
+  "build": {
+    "appId": "com.workjournal.desktop-widget",
+    "productName": "WorkJournal Widget",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "config.js",
+      ".env",
+      "assets/**/*"
+    ],
+    "win": {
+  "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
+    }
+  }
+}

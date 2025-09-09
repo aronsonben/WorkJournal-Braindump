@@ -1,0 +1,765 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkJournal Widget</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        #widget {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        /* Collapsed state - just the circle */
+        #widget.collapsed {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .circle-container {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
+        
+        /* Outer draggable ring */
+        .drag-ring {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            cursor: move;
+            transition: box-shadow 0.2s;
+        }
+        
+        .drag-ring:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+        
+        /* Inner clickable icon area */
+        .icon-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: transparent;
+            transition: background 0.2s;
+        }
+        
+        .icon-button:hover {
+            background: rgba(21, 196, 96, 0.1);
+        }
+        
+        .icon-button:active {
+            transform: translate(-50%, -50%) scale(0.9);
+        }
+        
+        .icon-button img {
+            width: 28px;
+            height: 28px;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        /* Visual feedback for drag */
+        .drag-ring.dragging {
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            opacity: 0.8;
+        }
+        
+        /* Expanded state - the panel */
+        #widget.expanded {
+            background: #1f2937;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: #f9fafb;
+        }
+        
+        .title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        
+        .close-btn:hover {
+            background: rgba(75, 85, 99, 0.5);
+            color: #f9fafb;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .textarea {
+            flex: 1;
+            background: rgba(55, 65, 81, 0.5);
+            border: 1px solid rgba(75, 85, 99, 0.5);
+            border-radius: 8px;
+            color: #f9fafb;
+            padding: 12px;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+        }
+        
+        .textarea:focus {
+            border-color: #15c460;
+            box-shadow: 0 0 0 2px rgba(21, 196, 96, 0.2);
+        }
+        
+        .textarea::placeholder {
+            color: #9ca3af;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+        
+        .status-select {
+            background: rgba(55, 65, 81, 0.5);
+            border: 1px solid rgba(75, 85, 99, 0.5);
+            border-radius: 6px;
+            color: #f9fafb;
+            padding: 4px 8px;
+            font-size: 12px;
+            outline: none;
+        }
+        
+        .save-btn {
+            background: #15c460;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .save-btn:hover:not(:disabled) {
+            background: #11a652;
+        }
+        
+        .save-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #000;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 4px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .message {
+            position: absolute;
+            top: -36px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .message.success {
+            background: #15c460;
+            color: #000;
+        }
+        
+        .message.error {
+            background: #ef4444;
+            color: #fff;
+        }
+        
+        .message.show {
+            opacity: 1;
+        }
+        
+        /* Tooltip for drag hint */
+        .tooltip {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .circle-container:hover .tooltip {
+            opacity: 1;
+        }
+
+        /* Analysis Popup */
+        .analysis-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 8px; /* keep a safe margin inside small windows */
+            pointer-events: none; /* never block clicks unless explicitly enabled */
+        }
+        .analysis-modal {
+            /* Fit within available window without overflowing */
+            width: min(360px, calc(100vw - 24px));
+            max-width: 100%;
+            max-height: calc(100vh - 24px);
+            background: #111827;
+            color: #e5e7eb;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+        .analysis-header, .analysis-footer { padding: 12px 14px; border-bottom: 1px solid #374151; }
+        .analysis-header { display: flex; align-items: center; justify-content: space-between; }
+        .analysis-title { font-size: 16px; font-weight: 600; }
+        .analysis-close { background: none; border: none; color: #9ca3af; font-size: 18px; cursor: pointer; }
+        .analysis-content { padding: 12px 14px; display: grid; gap: 12px; overflow: auto; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 8px; font-size: 11px; border: 1px solid rgba(21,196,96,0.3); background: rgba(21,196,96,0.15); color: #15c460; }
+        .elements-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 6px; }
+        .element-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        .pill { width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+        .pill-on { background: #15c460; color: #000; }
+        .pill-off { background: #4b5563; color: #9ca3af; }
+        .progress-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .progress-bar { flex: 1 1 auto; min-width: 0; height: 6px; background: #374151; border-radius: 999px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #15c460, #10b981); width: 0%; transition: width 0.3s ease; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .btn { padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid transparent; cursor: pointer; flex: 1 1 0; }
+        .btn-secondary { background: #374151; color: #e5e7eb; }
+        .btn-secondary:hover { background: #4b5563; }
+        .btn-primary { background: #15c460; color: #000; }
+        .btn-primary:hover { background: #12a855; }
+    </style>
+</head>
+<body>
+    <div id="widget" class="collapsed">
+        <!-- Content will be dynamically inserted here -->
+    </div>
+    
+    <div id="message" class="message"></div>
+    <!-- Analysis Overlay (hidden by default) -->
+    <div id="analysisOverlay" class="analysis-overlay" aria-hidden="true"></div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // State
+        let isExpanded = false;
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        
+        // Elements
+        const widget = document.getElementById('widget');
+        const message = document.getElementById('message');
+        
+        // Load config
+        let CONFIG = {};
+        try {
+            const configModule = require('./config');
+            CONFIG = configModule.CONFIG || {};
+        } catch (e) {
+            console.warn('Config not loaded:', e.message);
+        }
+        
+        // Render functions
+        function renderCollapsed() {
+            widget.className = 'collapsed';
+            widget.innerHTML = `
+                <div class="circle-container">
+                    <div class="drag-ring" id="dragRing"></div>
+                    <div class="icon-button" id="iconButton">
+                        <img src="./assets/suitcase.png" alt="Work Journal">
+                    </div>
+                    <div class="tooltip">Drag edge to move • Click icon to open</div>
+                </div>
+            `;
+            
+            // Add click handler for icon only
+            document.getElementById('iconButton').addEventListener('click', (e) => {
+                e.stopPropagation();
+                debugLog('icon click -> toggle-expand');
+                ipcRenderer.send('toggle-expand');
+            });
+            
+            // Add drag handling for outer ring only
+            const dragRing = document.getElementById('dragRing');
+            dragRing.addEventListener('mousedown', startDrag);
+        }
+        
+        function renderExpanded() {
+            widget.className = 'expanded';
+            widget.innerHTML = `
+                <div class="header">
+                    <div class="title">Work Journal Entry</div>
+                    <button class="close-btn" id="close">×</button>
+                </div>
+                <div class="content">
+                    <textarea 
+                        id="entry" 
+                        class="textarea" 
+                        placeholder="What did you work on today?"
+                    ></textarea>
+                    <div class="controls">
+                        <div class="status-group">
+                            <span>Status:</span>
+                            <select id="status" class="status-select">
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                        <button id="save" class="save-btn">Save</button>
+                    </div>
+                </div>
+            `;
+            
+            // Add event handlers
+            document.getElementById('close').addEventListener('click', () => {
+                debugLog('close click -> collapse');
+                ipcRenderer.send('collapse');
+            });
+            
+            document.getElementById('save').addEventListener('click', saveEntry);
+            
+            document.getElementById('entry').addEventListener('input', (e) => {
+                document.getElementById('save').disabled = !e.target.value.trim();
+            });
+            
+            // Focus textarea
+            setTimeout(() => {
+                document.getElementById('entry').focus();
+            }, 100);
+            
+            // Disable save initially
+            document.getElementById('save').disabled = true;
+        }
+        
+        // Dragging functions
+        function startDrag(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const dragRing = document.getElementById('dragRing');
+            if (dragRing) {
+                dragRing.classList.add('dragging');
+            }
+            
+            isDragging = true;
+            dragStart.x = e.clientX;
+            dragStart.y = e.clientY;
+            ipcRenderer.send('start-drag', { x: e.clientX, y: e.clientY });
+            
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('mouseup', endDrag);
+        }
+        
+        function onDrag(e) {
+            if (!isDragging) return;
+            ipcRenderer.send('drag', { 
+                screenX: e.screenX, 
+                screenY: e.screenY 
+            });
+        }
+        
+        function endDrag() {
+            const dragRing = document.getElementById('dragRing');
+            if (dragRing) {
+                dragRing.classList.remove('dragging');
+            }
+            
+            isDragging = false;
+            ipcRenderer.send('end-drag');
+            document.removeEventListener('mousemove', onDrag);
+            document.removeEventListener('mouseup', endDrag);
+        }
+        
+        // Save function
+        async function saveEntry() {
+            const entry = document.getElementById('entry');
+            const status = document.getElementById('status');
+            const saveBtn = document.getElementById('save');
+            
+            const content = entry.value.trim();
+            if (!content || !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY) {
+                showMessage('Configuration missing', 'error');
+                return;
+            }
+            
+            // Analyze entry locally, then show popup with story elements & details
+            const analysis = generateFallbackAnalysis(content);
+            showAnalysisPopup(analysis, content.split(/\s+/).filter(Boolean).length);
+        }
+        
+        // Message function
+        function showMessage(text, type) {
+            message.textContent = text;
+            message.className = `message ${type} show`;
+            setTimeout(() => {
+                message.classList.remove('show');
+            }, 3000);
+        }
+        
+        // IPC listeners
+        ipcRenderer.on('set-expanded', (event, expanded) => {
+            debugLog('ipc set-expanded', expanded);
+            isExpanded = expanded;
+            if (expanded) {
+                renderExpanded();
+            } else {
+                renderCollapsed();
+            }
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isExpanded) {
+                ipcRenderer.send('collapse');
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isExpanded) {
+                const saveBtn = document.getElementById('save');
+                if (saveBtn && !saveBtn.disabled) {
+                    saveEntry();
+                }
+            }
+            // Toggle debug overlay: Ctrl+Shift+D
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+                toggleDebugOverlay();
+            }
+            // Open DevTools: Ctrl+Shift+I
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
+                ipcRenderer.send('open-devtools');
+            }
+        });
+        
+        // Initialize
+        renderCollapsed();
+
+        // ----- Analysis helpers (local fallback, no external API) -----
+        // Debug utilities
+        let DEBUG_ENABLED = false;
+        let debugPanel = null;
+        function ensureDebugPanel() {
+            if (debugPanel) return debugPanel;
+            debugPanel = document.createElement('div');
+            debugPanel.id = 'wj-debug';
+            debugPanel.style.position = 'fixed';
+            debugPanel.style.bottom = '8px';
+            debugPanel.style.left = '8px';
+            debugPanel.style.maxWidth = '80vw';
+            debugPanel.style.maxHeight = '40vh';
+            debugPanel.style.overflow = 'auto';
+            debugPanel.style.background = 'rgba(0,0,0,0.75)';
+            debugPanel.style.color = '#9ca3af';
+            debugPanel.style.fontSize = '11px';
+            debugPanel.style.padding = '6px 8px';
+            debugPanel.style.border = '1px solid #374151';
+            debugPanel.style.borderRadius = '6px';
+            debugPanel.style.zIndex = '10000';
+            debugPanel.style.display = 'none';
+            document.body.appendChild(debugPanel);
+            return debugPanel;
+        }
+        function debugLog(...args) {
+            try {
+                const ts = new Date().toISOString().split('T')[1].replace('Z','');
+                console.log('[WJ]', ...args);
+                const panel = ensureDebugPanel();
+                if (DEBUG_ENABLED) {
+                    const line = document.createElement('div');
+                    line.textContent = `[${ts}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`;
+                    panel.appendChild(line);
+                    panel.scrollTop = panel.scrollHeight;
+                }
+            } catch {}
+        }
+        function toggleDebugOverlay() {
+            const panel = ensureDebugPanel();
+            DEBUG_ENABLED = !DEBUG_ENABLED;
+            panel.style.display = DEBUG_ENABLED ? 'block' : 'none';
+            debugLog('debug overlay', DEBUG_ENABLED ? 'enabled' : 'disabled');
+        }
+        function generateSemanticFallbackTags(content) {
+            const text = content.toLowerCase();
+            const tags = [];
+            if (/debug|bug|error|fix|broken/.test(text)) tags.push('debugging');
+            if (/test|testing|spec|unit|integration/.test(text)) tags.push('testing');
+            if (/code|coding|implement|develop|write|program/.test(text)) tags.push('coding');
+            if (/review|pr|pull.?request|merge/.test(text)) tags.push('code-review');
+            if (/deploy|deployment|release|ship|launch/.test(text)) tags.push('deployment');
+            if (/refactor|clean|organize|restructure/.test(text)) tags.push('refactoring');
+            if (/meeting|call|standup|sync|discuss/.test(text)) tags.push('meeting');
+            if (/plan|planning|design|architect/.test(text)) tags.push('planning');
+            if (/research|investigate|explore|learn/.test(text)) tags.push('research');
+            if (/document|doc|documentation|write.?up/.test(text)) tags.push('documentation');
+            if (/react|vue|angular|frontend|ui|interface/.test(text)) tags.push('frontend');
+            if (/api|server|backend|database|db/.test(text)) tags.push('backend');
+            if (/mobile|ios|android|app/.test(text)) tags.push('mobile');
+            if (/ai|ml|machine.?learning|neural/.test(text)) tags.push('ai-ml');
+            if (/difficult|hard|struggle|complex|challenging/.test(text)) tags.push('challenging');
+            if (/productive|efficient|focused|flow/.test(text)) tags.push('productive');
+            if (/frustrated|stuck|blocked|slow/.test(text)) tags.push('blocked');
+            if (/breakthrough|solved|success|accomplished/.test(text)) tags.push('breakthrough');
+            if (/creative|innovative|idea|experiment/.test(text)) tags.push('creative');
+            if (/new.?feature|feature|build|develop/.test(text)) tags.push('feature-development');
+            if (/bug.?fix|fix.?bug|repair/.test(text)) tags.push('bug-fix');
+            if (/optimize|performance|improve|faster/.test(text)) tags.push('optimization');
+            if (/maintain|update|upgrade|patch/.test(text)) tags.push('maintenance');
+            if (tags.length === 0) {
+                const wordCount = content.split(/\s+/).length;
+                if (wordCount > 100) tags.push('detailed-entry');
+                if (/team|colleague|pair|together/.test(text)) tags.push('collaboration');
+                if (/client|user|customer/.test(text)) tags.push('user-focused');
+                if (tags.length === 0) tags.push('work-update');
+            }
+            return Array.from(new Set(tags)).slice(0, 4);
+        }
+
+        function generateFallbackAnalysis(content) {
+            const text = content.toLowerCase();
+            const wordCount = content.split(/\s+/).filter(Boolean).length;
+            const tags = generateSemanticFallbackTags(content);
+            const detected_elements = {
+                context: wordCount > 5,
+                challenge: wordCount > 15,
+                action: wordCount > 3,
+                impact: wordCount > 25
+            };
+            let entry_type = 'routine';
+            if (wordCount < 50) {
+                entry_type = 'short';
+            } else if (detected_elements.challenge && !detected_elements.impact) {
+                entry_type = 'problem';
+            } else if (detected_elements.impact || /accomplished|finished|success|great|good|shipped|launched|released/.test(text)) {
+                entry_type = 'achievement';
+            } else if (/think|thought|feel|reflect|consider|realize|learn|understand|insight|perspective|wonder/.test(text)) {
+                entry_type = 'reflection';
+            }
+            let suggested_tip = null;
+            const elementsCount = Object.values(detected_elements).filter(Boolean).length;
+            if (elementsCount === 4) {
+                suggested_tip = "⭐ Great! You've captured a complete story.";
+            } else if (entry_type === 'short' && !detected_elements.context) {
+                suggested_tip = '💡 Consider adding which project or technology this relates to.';
+            } else if (detected_elements.challenge && !detected_elements.action) {
+                suggested_tip = '🔍 You noted the challenge — what steps are you taking to solve it?';
+            } else if (detected_elements.action && !detected_elements.impact) {
+                suggested_tip = '📈 Nice! Consider noting the outcome or what this unlocks.';
+            }
+            return {
+                tags,
+                detected_elements,
+                entry_type,
+                suggested_tip,
+                depth_score: Math.min(100, wordCount * 2)
+            };
+        }
+
+        function getDepthLevel(score) {
+            if (score >= 80) return { emoji: '🌳', label: 'Portfolio-Ready', color: '#34d399' };
+            if (score >= 60) return { emoji: '🌿', label: 'Growing', color: '#4ade80' };
+            if (score >= 40) return { emoji: '🌱', label: 'Developing', color: '#f59e0b' };
+            return { emoji: '🌰', label: 'Seed', color: '#fb923c' };
+        }
+
+        function showAnalysisPopup(analysis, wordCount) {
+            const overlay = document.getElementById('analysisOverlay');
+            if (!overlay) return;
+            const depth = getDepthLevel(analysis.depth_score);
+            const progress = Math.min(100, analysis.depth_score);
+            const tagsHtml = (analysis.tags || []).map(t => `<span class="badge">#${t}</span>`).join(' ');
+            const elements = analysis.detected_elements || { context: false, challenge: false, action: false, impact: false };
+            overlay.innerHTML = `
+                <div class="analysis-modal" role="dialog" aria-modal="true">
+                  <div class="analysis-header">
+                    <div class="analysis-title">Entry Analysis</div>
+                    <button class="analysis-close" id="apClose">×</button>
+                  </div>
+                  <div class="analysis-content">
+                    ${tagsHtml ? `<div>${tagsHtml}</div>` : ''}
+                    <div>
+                      <div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">Story Elements</div>
+                      <div class="elements-row">
+                        ${['context','challenge','action','impact'].map(key => `
+                          <div class="element-item">
+                            <span class="pill ${elements[key] ? 'pill-on' : 'pill-off'}">${elements[key] ? '✓' : '○'}</span>
+                            <span style="text-transform:capitalize;color:${elements[key] ? '#15c460' : '#9ca3af'}">${key}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                    <div>
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:18px;">${depth.emoji}</span>
+                        <span style="font-weight:600;color:${depth.color}">${depth.label}</span>
+                        <span style="font-size:12px;color:#9ca3af;">(${wordCount} words)</span>
+                      </div>
+                      <div class="progress-wrap">
+                        <div class="progress-bar"><div class="progress-fill" style="width:${progress}%"></div></div>
+                        <span style="font-size:12px;color:#9ca3af;">${analysis.depth_score}/100</span>
+                      </div>
+                    </div>
+                    ${analysis.suggested_tip ? `<div style="padding:10px;border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.15);border-radius:8px;color:#dbeafe;font-size:12px;">💡 ${analysis.suggested_tip}</div>` : ''}
+                  </div>
+                  <div class="analysis-footer" style="border-top:1px solid #374151;">
+                    <div class="actions">
+                      <button id="apSaveAsIs" class="btn btn-secondary">Save As Is</button>
+                      <button id="apEnhance" class="btn btn-primary">Enhance Entry</button>
+                    </div>
+                  </div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+            overlay.style.pointerEvents = 'auto';
+
+            const close = () => { overlay.style.display = 'none'; overlay.style.pointerEvents = 'none'; overlay.innerHTML = ''; };
+            document.getElementById('apClose').addEventListener('click', close);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+            document.getElementById('apEnhance').addEventListener('click', () => {
+                close();
+                if (analysis.suggested_tip) {
+                    showMessage(analysis.suggested_tip, 'success');
+                }
+                // keep user in editor to enhance manually
+            });
+            document.getElementById('apSaveAsIs').addEventListener('click', async () => {
+                close();
+                await saveWithTags(analysis.tags || []);
+            });
+        }
+
+        async function saveWithTags(tags) {
+            const entry = document.getElementById('entry');
+            const status = document.getElementById('status');
+            const saveBtn = document.getElementById('save');
+            const content = entry.value.trim();
+            if (!content) return;
+            // Show loading only during actual save
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner"></span>Saving';
+            try {
+                const response = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/entries`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': CONFIG.SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        content,
+                        word_count: content.split(/\s+/).length,
+                        status: status.value,
+                        tags: Array.isArray(tags) ? tags : []
+                    })
+                });
+                if (response.ok) {
+                    showMessage('Entry saved!', 'success');
+                    entry.value = '';
+                    status.value = 'in_progress';
+                    ipcRenderer.send('entry-saved');
+                } else {
+                    showMessage('Failed to save', 'error');
+                }
+            } catch (err) {
+                console.error('Save error:', err);
+                showMessage('Save failed', 'error');
+            }
+            saveBtn.innerHTML = 'Save';
+            saveBtn.disabled = !entry.value.trim();
+        }
+    </script>
+</body>
+</html>
