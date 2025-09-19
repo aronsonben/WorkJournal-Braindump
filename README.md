@@ -1,3 +1,40 @@
+# WorkJournal-Braindump
+
+This is fork of [WorkJournal](https://github.com/abgneudev/WorkJournal) made to play around with how the application framework @abgneudev built out might work well with an existing 'braindump' idea I've had. 
+
+**9/19/25:** At present, the application is not deployed and not working. Adding code to keep log of where I'm at & going.
+
+## Braindump Mode (New)
+
+Braindump mode lets you quickly capture raw tasks (one per line), analyze them for categories, priorities, and duplicates, then commit them as structured tasks linked to a saved braindump session.
+
+### Workflow
+1. Toggle to Braindump mode via the header button (🧠 Braindump)
+2. Paste or type tasks (one per line)
+3. Click Analyze to get AI-assisted categorization (heuristic fallback if no Gemini key)
+4. Review results: adjust category, priority, or drop/merge tasks
+5. Commit to persist a `braindumps` row plus associated `tasks`
+
+### Database Additions
+See `database-migration-braindump.sql` for the new `braindumps` table and task columns:
+- `braindump_id`, `category`, `original_line`, `merged_from`, `similarity_group`, `priority_explanation`
+
+### Environment
+Add `GEMINI_API_KEY` to `.env.local` (not exposed client-side). A fallback heuristic runs if absent.
+
+### Testing
+Run unit tests (utilities / parsing):
+```
+npm run test
+```
+
+### Future Enhancements
+- True semantic duplicate detection (embedding similarity)
+- Multi-braindump history view & diffing
+- Drag-and-drop priority lane UI
+- AI merge suggestions for overlapping tasks
+
+# Local Development Instructions
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -34,33 +71,3 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Braindump Mode (New)
-
-Braindump mode lets you quickly capture raw tasks (one per line), analyze them for categories, priorities, and duplicates, then commit them as structured tasks linked to a saved braindump session.
-
-### Workflow
-1. Toggle to Braindump mode via the header button (🧠 Braindump)
-2. Paste or type tasks (one per line)
-3. Click Analyze to get AI-assisted categorization (heuristic fallback if no Gemini key)
-4. Review results: adjust category, priority, or drop/merge tasks
-5. Commit to persist a `braindumps` row plus associated `tasks`
-
-### Database Additions
-See `database-migration-braindump.sql` for the new `braindumps` table and task columns:
-- `braindump_id`, `category`, `original_line`, `merged_from`, `similarity_group`, `priority_explanation`
-
-### Environment
-Add `GEMINI_API_KEY` to `.env.local` (not exposed client-side). A fallback heuristic runs if absent.
-
-### Testing
-Run unit tests (utilities / parsing):
-```
-npm run test
-```
-
-### Future Enhancements
-- True semantic duplicate detection (embedding similarity)
-- Multi-braindump history view & diffing
-- Drag-and-drop priority lane UI
-- AI merge suggestions for overlapping tasks
