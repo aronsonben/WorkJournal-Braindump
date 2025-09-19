@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, Entry } from '../../../lib/supabase';
+import { supabase, Entry, Task } from '../../../lib/supabase';
 
 // Configure route segment
 export const maxDuration = 15; // 15 seconds timeout for analysis
@@ -74,42 +74,82 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '7');
+  const mode = searchParams.get('mode') || 'journal';
     
-    // Fetch recent entries
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    const { data: entries, error } = await supabase
-      .from('entries')
-      .select('*')
-      .gte('created_at', cutoffDate.toISOString())
-      .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching entries:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch entries' },
-        { status: 500 }
-      );
+    if (mode === 'braindump') {
+      // Analyze tasks instead of entries
+      const { data: tasks, error: taskError } = await supabase
+        .from('tasks')
+        .select('*')
+        .gte('created_at', cutoffDate.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (taskError) {
+        console.error('Error fetching tasks:', taskError);
+        return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
+      }
+
+      if (!tasks || tasks.length === 0) {
+        return NextResponse.json({
+          summary: 'No tasks captured yet. Start with a braindump to generate momentum.',
+          main_themes: [],
+            past_accomplishments: [],
+          way_ahead: ['Add at least 5 tasks via a braindump to begin prioritizing'],
+          pattern_insight: 'Capturing tasks regularly enables better prioritization and focus.',
+          gentle_nudge: 'Do a quick 2-minute braindump of everything on your mind right now.'
+        });
+      }
+
+      // Convert tasks to pseudo entries for reuse of analysis logic
+      const pseudoEntries: Entry[] = tasks.map((t: any) => ({
+        id: t.id,
+        content: t.content,
+        word_count: t.content.split(/\s+/).filter(Boolean).length,
+        created_at: t.created_at,
+        tags: [],
+        status: t.status,
+        workflow_stage: undefined,
+        blocked_reason: undefined,
+        completion_percentage: undefined
+      }));
+
+      const analysis = await generateMorningSummary(pseudoEntries, days);
+      // For braindump mode we do not filter against completed entries
+      return NextResponse.json(analysis);
+    } else {
+      // Journal mode (original behavior)
+      const { data: entries, error } = await supabase
+        .from('entries')
+        .select('*')
+        .gte('created_at', cutoffDate.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching entries:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch entries' },
+          { status: 500 }
+        );
+      }
+
+      if (!entries || entries.length === 0) {
+        return NextResponse.json({
+          summary: "Welcome to a fresh start! No recent entries to analyze yet—today's a great day to begin.",
+          main_themes: [],
+          past_accomplishments: [],
+          way_ahead: ["Create your first entry describing today's focus"],
+          pattern_insight: "Establishing a daily logging habit early builds powerful reflection data.",
+          gentle_nudge: "Add a quick note about what you're starting with today."
+        });
+      }
+
+      const analysis = await generateMorningSummary(entries, days);
+      const filteredAnalysis = await filterCompletedTasks(analysis);
+      return NextResponse.json(filteredAnalysis);
     }
-
-    if (!entries || entries.length === 0) {
-      return NextResponse.json({
-        summary: "Welcome to a fresh start! No recent entries to analyze yet—today's a great day to begin.",
-        main_themes: [],
-        past_accomplishments: [],
-        way_ahead: ["Create your first entry describing today's focus"],
-        pattern_insight: "Establishing a daily logging habit early builds powerful reflection data.",
-        gentle_nudge: "Add a quick note about what you're starting with today."
-      });
-    }
-
-    // Generate analysis using LLM, filtering out completed tasks
-    const analysis = await generateMorningSummary(entries, days);
-    
-    // Filter out completed tasks from way_ahead
-    const filteredAnalysis = await filterCompletedTasks(analysis);
-    return NextResponse.json(filteredAnalysis);
 
   } catch (error) {
     console.error('Error generating morning summary:', error);

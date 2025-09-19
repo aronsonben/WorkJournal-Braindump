@@ -3,11 +3,15 @@
 import { useState, useEffect } from 'react';
 import { supabase, Entry } from '../lib/supabase';
 import { EntryInput } from './components/entry-input';
+import { BraindumpInput } from './components/braindump-input';
+import { BraindumpAnalysisReview } from './components/braindump-analysis-review';
 import { ContributionGraph } from './components/contribution-graph';
 import { EntryCard } from './components/entry-card';
 import { MorningSummaryCard } from './components/morning-summary';
+import { useAppMode } from './components/mode-context';
 
 export default function Home() {
+  const { mode, toggle } = useAppMode();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,6 +60,10 @@ export default function Home() {
     loadEntries(); // Reload entries after saving
   };
 
+  // Placeholder for braindump analysis result
+  const [lastBraindumpAnalysis, setLastBraindumpAnalysis] = useState<any | null>(null);
+  const [braindumpRaw, setBraindumpRaw] = useState<string>('');
+
   // Filter entries based on search
   const filteredEntries = entries.filter(entry => {
     const contentMatch = entry.content.toLowerCase().includes(searchTerm.toLowerCase());
@@ -79,7 +87,7 @@ export default function Home() {
               <div className="w-8 h-8 bg-[#15c460] rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-lg">W</span>
               </div>
-              <span className="text-xl font-semibold text-white">WorkJournal</span>
+              <span className="text-xl font-semibold text-white">{mode === 'journal' ? 'WorkJournal' : 'Braindump'}</span>
             </div>
 
             {/* Search (moved into header) */}
@@ -96,6 +104,14 @@ export default function Home() {
 
             {/* Actions */}
             <div className="flex items-center gap-3 ml-auto">
+              {/* Mode Toggle */}
+              <button
+                onClick={toggle}
+                className="px-3 py-2 rounded-lg bg-gradient-to-r from-gray-800 to-gray-700 hover:from-gray-700 hover:to-gray-600 border border-gray-700 text-gray-200 text-sm flex items-center gap-2"
+                aria-label="Toggle mode"
+              >
+                {mode === 'journal' ? '🧠 Braindump' : '📓 Journal'}
+              </button>
               {/* Compact search button for mobile */}
               <div className="md:hidden">
                 <button
@@ -139,8 +155,20 @@ export default function Home() {
 
             {/* (Search bar moved to header) */}
 
-          {/* Entry Input Section */}
-          <EntryInput onSave={handleSave} />
+          {/* Input Section varies by mode */}
+          {mode === 'journal' ? (
+            <EntryInput onSave={handleSave} />
+          ) : (
+            <>
+              <BraindumpInput onAnalyzed={(analysis) => setLastBraindumpAnalysis(analysis)} />
+              <BraindumpAnalysisReview
+                analysis={lastBraindumpAnalysis}
+                rawText={braindumpRaw}
+                onReset={() => { setLastBraindumpAnalysis(null); setBraindumpRaw(''); }}
+                onCommitted={() => { setLastBraindumpAnalysis(null); setBraindumpRaw(''); /* could refresh tasks later */ }}
+              />
+            </>
+          )}
         </div>
 
         {/* Right Column */}

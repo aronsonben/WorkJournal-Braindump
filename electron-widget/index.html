@@ -730,6 +730,7 @@
             saveBtn.disabled = true;
             saveBtn.innerHTML = '<span class="spinner"></span>Saving';
             try {
+                debugLog("attempting to save with tags")
                 const response = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/entries`, {
                     method: 'POST',
                     headers: {

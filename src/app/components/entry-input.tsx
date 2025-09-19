@@ -28,6 +28,7 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
   const [showTip, setShowTip] = useState(false);
   const [savedTip, setSavedTip] = useState<string | null>(null);
   const [entryStatus, setEntryStatus] = useState<'in_progress' | 'completed'>('in_progress');
+  const [analysisEnabled, setAnalysisEnabled] = useState(true);
 
   // Whisper hook for live voice captioning
   const whisper = useWhisper();
@@ -63,19 +64,25 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
     setSaving(true);
     
     try {
-      // Generate analysis for the popup
-      const response = await fetch('/api/generate-tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      
-      if (response.ok) {
-        const analysisData: ComprehensiveAnalysis = await response.json();
-        setAnalysis(analysisData);
-        setShowAnalysisPopup(true);
+      // Check if analysis is enabled
+      if (analysisEnabled) {
+        // Generate analysis for the popup
+        const response = await fetch('/api/generate-tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        
+        if (response.ok) {
+          const analysisData: ComprehensiveAnalysis = await response.json();
+          setAnalysis(analysisData);
+          setShowAnalysisPopup(true);
+        } else {
+          // If analysis fails, save directly
+          await saveEntryDirectly();
+        }
       } else {
-        // If analysis fails, save directly
+        // Skip analysis and save directly
         await saveEntryDirectly();
       }
     } catch (error) {
@@ -202,6 +209,26 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Analysis Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Analysis:</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={analysisEnabled}
+                  onChange={(e) => setAnalysisEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-9 h-5 rounded-full transition-colors ${
+                  analysisEnabled ? 'bg-[#15c460]' : 'bg-gray-600'
+                }`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                    analysisEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                  } mt-0.5`} />
+                </div>
+              </label>
+            </div>
+
             {/* Status Selector */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400">Status:</span>
@@ -254,6 +281,8 @@ export function EntryInput({ onSave }: { onSave: () => void }) {
                 <span className="flex items-center gap-2">✨ SAVE</span>
               )}
             </button>
+
+
           </div>
         </div>
       </div>

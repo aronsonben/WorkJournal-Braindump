@@ -34,3 +34,33 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Braindump Mode (New)
+
+Braindump mode lets you quickly capture raw tasks (one per line), analyze them for categories, priorities, and duplicates, then commit them as structured tasks linked to a saved braindump session.
+
+### Workflow
+1. Toggle to Braindump mode via the header button (🧠 Braindump)
+2. Paste or type tasks (one per line)
+3. Click Analyze to get AI-assisted categorization (heuristic fallback if no Gemini key)
+4. Review results: adjust category, priority, or drop/merge tasks
+5. Commit to persist a `braindumps` row plus associated `tasks`
+
+### Database Additions
+See `database-migration-braindump.sql` for the new `braindumps` table and task columns:
+- `braindump_id`, `category`, `original_line`, `merged_from`, `similarity_group`, `priority_explanation`
+
+### Environment
+Add `GEMINI_API_KEY` to `.env.local` (not exposed client-side). A fallback heuristic runs if absent.
+
+### Testing
+Run unit tests (utilities / parsing):
+```
+npm run test
+```
+
+### Future Enhancements
+- True semantic duplicate detection (embedding similarity)
+- Multi-braindump history view & diffing
+- Drag-and-drop priority lane UI
+- AI merge suggestions for overlapping tasks
