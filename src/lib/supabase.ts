@@ -41,6 +41,39 @@ export interface Braindump {
   metadata?: Record<string, unknown>
 }
 
+export interface BraindumpTask extends Task {
+  braindump_id?: string | null
+  original_line?: string | null
+  normalized?: string | null
+  category?: string | null
+  priority_group?: number | null // 1 (Must Do) .. 4 (Want To Do)
+  ai_suggested_priority?: number | null
+  action?: 'keep' | 'merge' | 'drop' | 'clarify'
+  rationale?: string | null
+  time_estimate_minutes?: number | null
+  energy_level?: 'low' | 'medium' | 'high' | null
+  quick_win?: boolean | null
+  blocking?: boolean | null
+  dependencies?: string[] | null
+  shininess_rank?: number | null
+  urgency_rank?: number | null
+  longevity?: number | null
+  base_priority_rank?: number | null
+  score?: number | null
+  overall_rank?: number | null
+  scoring_explanation?: string | null
+  similarity_group?: string | null
+  merged_from?: any
+}
+
+export interface TaskCategory {
+  id: string
+  user_id: string
+  name: string
+  usage_count: number
+  created_at: string
+}
+
 export interface CategorizedTaskSuggestion {
   line: string
   normalized: string
@@ -83,4 +116,8 @@ export interface BraindumpAnalysisResult {
     quick_wins: number
     estimated_total_minutes: number
   }
+}
+
+export interface SimpleBraindumpAnalysisResult {
+  response: string
 }

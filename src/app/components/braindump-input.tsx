@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { CategorizedTaskSuggestion, BraindumpAnalysisResult } from '../../lib/supabase';
+import { CategorizedTaskSuggestion, BraindumpAnalysisResult, SimpleBraindumpAnalysisResult } from '../../lib/supabase';
 
 interface BraindumpInputProps {
-  onAnalyzed: (analysis: BraindumpAnalysisResult) => void;
+  onAnalyzed: (analysis: SimpleBraindumpAnalysisResult) => void;
+  rawText: string;
+  setRawText: (rawText: string) => void;
 }
 
 function parseLines(raw: string): string[] {
@@ -14,8 +16,8 @@ function parseLines(raw: string): string[] {
     .filter(l => l.length > 0);
 }
 
-export const BraindumpInput: React.FC<BraindumpInputProps> = ({ onAnalyzed }) => {
-  const [rawText, setRawText] = useState('');
+export const BraindumpInput: React.FC<BraindumpInputProps> = ({ onAnalyzed, rawText, setRawText }) => {
+  // const [rawText, setRawText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +34,9 @@ export const BraindumpInput: React.FC<BraindumpInputProps> = ({ onAnalyzed }) =>
         body: JSON.stringify({ content: rawText })
       });
       if (res.ok) {
-          const data: BraindumpAnalysisResult = await res.json();
+          // const data: BraindumpAnalysisResult = await res.json();
+          const data: SimpleBraindumpAnalysisResult = await res.json();
+          console.log("FOUND DATA:", data);
           onAnalyzed(data);
         } else {
           throw new Error('Analysis failed');

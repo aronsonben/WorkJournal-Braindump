@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase, Entry } from '../lib/supabase';
+import { supabase, Entry, SimpleBraindumpAnalysisResult } from '../lib/supabase';
 import { EntryInput } from './components/entry-input';
 import { BraindumpInput } from './components/braindump-input';
 import { BraindumpAnalysisReview } from './components/braindump-analysis-review';
+import { BraindumpScoringResults } from './components/braindump-scoring-results';
 import { ContributionGraph } from './components/contribution-graph';
 import { EntryCard } from './components/entry-card';
 import { MorningSummaryCard } from './components/morning-summary';
@@ -61,8 +62,9 @@ export default function Home() {
   };
 
   // Placeholder for braindump analysis result
-  const [lastBraindumpAnalysis, setLastBraindumpAnalysis] = useState<any | null>(null);
+  const [lastBraindumpAnalysis, setLastBraindumpAnalysis] = useState<SimpleBraindumpAnalysisResult|null>(null);
   const [braindumpRaw, setBraindumpRaw] = useState<string>('');
+  const [scoringResult, setScoringResult] = useState<any|null>(null);
 
   // Filter entries based on search
   const filteredEntries = entries.filter(entry => {
@@ -160,13 +162,15 @@ export default function Home() {
             <EntryInput onSave={handleSave} />
           ) : (
             <>
-              <BraindumpInput onAnalyzed={(analysis) => setLastBraindumpAnalysis(analysis)} />
+              <BraindumpInput onAnalyzed={(analysis) => { setLastBraindumpAnalysis(analysis); setScoringResult(null); }} rawText={braindumpRaw} setRawText={setBraindumpRaw}/>
               <BraindumpAnalysisReview
                 analysis={lastBraindumpAnalysis}
                 rawText={braindumpRaw}
                 onReset={() => { setLastBraindumpAnalysis(null); setBraindumpRaw(''); }}
-                onCommitted={() => { setLastBraindumpAnalysis(null); setBraindumpRaw(''); /* could refresh tasks later */ }}
+                onCommitted={() => { /* keep analysis cleared but retain scoring */ setLastBraindumpAnalysis(null); setBraindumpRaw(''); }}
+                onScoringResult={(r) => setScoringResult(r)}
               />
+              <BraindumpScoringResults result={scoringResult} onClose={() => setScoringResult(null)} />
             </>
           )}
         </div>

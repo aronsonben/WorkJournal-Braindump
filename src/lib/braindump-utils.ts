@@ -24,3 +24,11 @@ export function detectDuplicates(lines: string[], threshold = 0.75): DuplicatePa
   }
   return results;
 }
+
+export function normalizeTaskLine(line: string): string {
+  return line
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?;:,]+$/, '');
+}
